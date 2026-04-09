@@ -769,6 +769,9 @@ function renderSettings() {
           <button class="btn-danger" id="btn-export-json">⬇️ Export all trips (JSON)</button>
           <button class="btn-danger" id="btn-import-json">⬆️ Import trips (JSON)</button>
           <input type="file" id="inp-import-file" accept=".json" style="display:none" />
+          <button class="btn-danger" id="btn-export-sheets">📊 Export all trips to Sheets (CSV)</button>
+          <button class="btn-danger" id="btn-import-sheets">📊 Import from Sheets (CSV)</button>
+          <input type="file" id="inp-import-sheets" accept=".csv" style="display:none" />
           <button class="btn-danger" id="btn-clear-data">🗑 Clear all data</button>
         </div>
       </div>
@@ -1690,6 +1693,11 @@ function attachHandlers() {
       document.getElementById('inp-import-file').click();
     });
     document.getElementById('inp-import-file')?.addEventListener('change', importJSON);
+    document.getElementById('btn-export-sheets')?.addEventListener('click', exportAllCSV);
+    document.getElementById('btn-import-sheets')?.addEventListener('click', () => {
+      document.getElementById('inp-import-sheets').click();
+    });
+    document.getElementById('inp-import-sheets')?.addEventListener('change', importAllCSV);
     document.getElementById('btn-clear-data')?.addEventListener('click', () => {
       if (confirm('Delete all trips and data? This cannot be undone.')) {
         state = { trips: [] };
@@ -1721,6 +1729,122 @@ function importJSON(e) {
         save(); navigate('trips');
       }
     } catch { alert('Invalid JSON file.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ─── Toast ───────────────────────────────────────────────────────────────── */
+function showToast(msg, durationMs = 3500) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('fade-out');
+    setTimeout(() => el.remove(), 420);
+  }, durationMs);
+}
+
+/* ─── All-trips CSV (Google Sheets compatible) ────────────────────────────── */
+const ALL_CSV_HEADERS = ['Trip','TripStart','TripEnd','TripCurrency','Day','Theme','Date','Type','Emoji','Title','Start','End','Cost','Currency','Location','Notes'];
+
+function allTripsToCSVRows() {
+  const rows = [ALL_CSV_HEADERS];
+  state.trips.forEach(trip => {
+    trip.days.forEach((d, i) => {
+      const dd = dayDate(trip, i);
+      const dateStr = dd ? dd.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'}) : '';
+      const acts = d.activities;
+      const tripBase = [trip.name||'', trip.startDate||'', trip.endDate||'', trip.currency||''];
+      if (!acts.length) {
+        rows.push([...tripBase, i+1, d.title||'', dateStr, '', '', '', '', '', '', '', '', '']);
+      } else {
+        acts.forEach(a => rows.push([
+          ...tripBase,
+          i+1, d.title||'', dateStr,
+          a.type, typeInfo(a.type).emoji, a.title||'',
+          a.startTime, a.endTime,
+          a.cost||'', a.currency||trip.currency||'',
+          a.location||'', a.notes||''
+        ]));
+      }
+    });
+  });
+  return rows;
+}
+
+function exportAllCSV() {
+  if (!state.trips.length) { showToast('No trips to export.'); return; }
+  const rows = allTripsToCSVRows();
+  const csv  = rows.map(r => r.map(csvEscapeCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'travel-planner-all-trips.csv'; a.click();
+  URL.revokeObjectURL(url);
+  setTimeout(() => window.open('https://sheets.new', '_blank'), 400);
+  showToast('CSV downloaded! In Google Sheets: File → Import → Upload → Replace spreadsheet');
+}
+
+function importAllCSV(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const [headers, ...rows] = parseCSV(ev.target.result);
+      const idx = k => headers.indexOf(k);
+      if (idx('Trip') === -1 || idx('Day') === -1) {
+        alert('Invalid file — expected a Travel Planner all-trips CSV export.');
+        return;
+      }
+
+      // Group rows by trip name+start
+      const tripMap = new Map();
+      rows.forEach(row => {
+        const key = (row[idx('Trip')]||'') + '|' + (row[idx('TripStart')]||'');
+        if (!tripMap.has(key)) {
+          tripMap.set(key, {
+            id: uid(),
+            name:      row[idx('Trip')]        || 'Trip',
+            startDate: row[idx('TripStart')]   || '',
+            endDate:   row[idx('TripEnd')]     || '',
+            currency:  row[idx('TripCurrency')]|| '',
+            days: {}
+          });
+        }
+        const trip = tripMap.get(key);
+        const dayNum = Number(row[idx('Day')]) || 1;
+        if (!trip.days[dayNum]) trip.days[dayNum] = { title: row[idx('Theme')]||'', activities: [] };
+        const type = row[idx('Type')]?.trim();
+        if (type) {
+          trip.days[dayNum].activities.push({
+            id:        uid(),
+            type,
+            title:     row[idx('Title')]    || '',
+            startTime: row[idx('Start')]    || '09:00',
+            endTime:   row[idx('End')]      || '10:00',
+            cost:      row[idx('Cost')]     || '',
+            currency:  row[idx('Currency')] || '',
+            location:  row[idx('Location')] || '',
+            notes:     row[idx('Notes')]    || '',
+          });
+        }
+      });
+
+      const importedTrips = [...tripMap.values()].map(t => ({
+        ...t,
+        days: Object.entries(t.days)
+          .sort(([a], [b]) => Number(a) - Number(b))
+          .map(([, d]) => ({ id: uid(), title: d.title, activities: d.activities }))
+      }));
+
+      if (!confirm(`Import ${importedTrips.length} trip(s) from CSV? Existing data will be replaced.`)) return;
+      state.trips = importedTrips;
+      save(); navigate('trips');
+    } catch { alert('Could not parse CSV — make sure it was exported from Travel Planner.'); }
   };
   reader.readAsText(file);
   e.target.value = '';
