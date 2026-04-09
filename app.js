@@ -1,3 +1,9 @@
+/* ─── PWA install prompt capture ─────────────────────────────────────────── */
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  window._pwaInstallPrompt = e;
+});
+
 /* ─── State ───────────────────────────────────────────────────────────────── */
 const STORAGE_KEY = 'travel-planner-v1';
 
@@ -144,6 +150,32 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) state = JSON.parse(raw);
   } catch {}
+}
+
+/* ─── Theme ───────────────────────────────────────────────────────────────── */
+function applyTheme() {
+  const t = state.theme; // 'light' | 'dark' | undefined (auto)
+  if (t === 'light' || t === 'dark') {
+    document.documentElement.setAttribute('data-theme', t);
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+}
+function themeIcon() {
+  if (state.theme === 'light') return '☀️';
+  if (state.theme === 'dark')  return '🌙';
+  return '🌓'; // auto
+}
+function cycleTheme() {
+  if (!state.theme)           state.theme = 'light';
+  else if (state.theme === 'light') state.theme = 'dark';
+  else                         state.theme = undefined;
+  applyTheme(); save();
+  // update icon in place without full re-render
+  const btn = document.getElementById('btn-toggle-theme');
+  if (btn) btn.textContent = themeIcon();
+  const label = !state.theme ? 'Auto (system)' : state.theme === 'light' ? 'Light' : 'Dark';
+  showToast(`Theme: ${label}`);
 }
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -454,6 +486,7 @@ function renderTrips() {
         <div class="ab-title">✈️ Travel Planner</div>
       </div>
       <div class="ab-actions">
+        <button class="btn-icon" id="btn-toggle-theme" title="Toggle theme">${themeIcon()}</button>
         <button class="btn-icon" id="btn-open-settings" title="Settings">⚙️</button>
         <button class="btn-primary-sm" id="btn-new-trip">+ Trip</button>
       </div>
@@ -743,6 +776,27 @@ function renderSettings() {
     </div>
     <div class="screen-body">
       <div class="settings-body">
+        <div class="settings-section">
+          <h3>📱 Install App</h3>
+          <p class="settings-desc">Add Travel Planner to your home screen for a full-screen app experience — works offline too.</p>
+          <p class="settings-desc" style="margin-top:6px">
+            <b>iOS Safari:</b> Tap the Share button → <em>Add to Home Screen</em><br>
+            <b>Android Chrome:</b> Tap ⋮ menu → <em>Add to Home Screen</em> or <em>Install app</em><br>
+            <b>Desktop Chrome/Edge:</b> Click the install icon (⊕) in the address bar
+          </p>
+          <button class="btn-primary-sm" id="btn-pwa-install" style="display:none">⊕ Install App</button>
+        </div>
+        <div class="settings-section">
+          <h3>🌓 Appearance</h3>
+          <div class="theme-toggle-row">
+            <span class="settings-desc" style="margin:0">Theme</span>
+            <div class="theme-btns">
+              <button class="btn-theme ${!state.theme ? 'active' : ''}" data-theme-val="">🌓 Auto</button>
+              <button class="btn-theme ${state.theme === 'light' ? 'active' : ''}" data-theme-val="light">☀️ Light</button>
+              <button class="btn-theme ${state.theme === 'dark' ? 'active' : ''}" data-theme-val="dark">🌙 Dark</button>
+            </div>
+          </div>
+        </div>
         <div class="settings-section">
           <h3>🕐 Timeline</h3>
           <div class="form-group">
@@ -1548,6 +1602,7 @@ function attachHandlers() {
   if (currentView === 'trips') {
     document.getElementById('btn-new-trip')?.addEventListener('click', () => openTripModal(null));
     document.getElementById('btn-open-settings')?.addEventListener('click', () => navigate('settings'));
+    document.getElementById('btn-toggle-theme')?.addEventListener('click', cycleTheme);
     document.querySelectorAll('.trip-card').forEach(card => {
       card.addEventListener('click', e => {
         if (e.target.closest('.btn-del-trip')) return; // handled separately
@@ -1680,6 +1735,28 @@ function attachHandlers() {
 
   // Settings screen
   if (currentView === 'settings') {
+    // Theme buttons
+    document.querySelectorAll('.btn-theme').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.themeVal;
+        state.theme = val || undefined;
+        applyTheme(); save();
+        document.querySelectorAll('.btn-theme').forEach(b => b.classList.toggle('active', b.dataset.themeVal === (state.theme || '')));
+        const icon = document.getElementById('btn-toggle-theme');
+        if (icon) icon.textContent = themeIcon();
+      });
+    });
+    // PWA install button (shown when browser fires beforeinstallprompt)
+    if (window._pwaInstallPrompt) {
+      const btn = document.getElementById('btn-pwa-install');
+      if (btn) {
+        btn.style.display = 'block';
+        btn.addEventListener('click', () => {
+          window._pwaInstallPrompt.prompt();
+          window._pwaInstallPrompt.userChoice.then(() => { window._pwaInstallPrompt = null; btn.style.display = 'none'; });
+        });
+      }
+    }
     document.getElementById('btn-save-start-hour')?.addEventListener('click', () => {
       state.dayStartHour = parseInt(document.getElementById('inp-start-hour').value, 10);
       save(); render();
@@ -1852,4 +1929,5 @@ function importAllCSV(e) {
 
 /* ─── Init ────────────────────────────────────────────────────────────────── */
 load();
+applyTheme();
 render();

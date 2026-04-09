@@ -15,6 +15,32 @@
   --font:     'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
+/* Light mode variables — activated by OS preference or explicit toggle */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:      #f6f8fa;
+    --surface: #ffffff;
+    --surface2:#eaeef2;
+    --border:  #d0d7de;
+    --text:    #1f2328;
+    --muted:   #656d76;
+    --accent:  #0969da;
+    --green:   #1a7f37;
+    --danger:  #cf222e;
+  }
+}
+html[data-theme="light"] {
+  --bg:      #f6f8fa;
+  --surface: #ffffff;
+  --surface2:#eaeef2;
+  --border:  #d0d7de;
+  --text:    #1f2328;
+  --muted:   #656d76;
+  --accent:  #0969da;
+  --green:   #1a7f37;
+  --danger:  #cf222e;
+}
+
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
 
 body {
@@ -526,13 +552,36 @@ select option { background: var(--surface2); }
 }
 .btn-danger:hover { border-color: var(--danger); color: var(--danger); }
 
+.theme-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.theme-btns { display: flex; gap: 6px; }
+.btn-theme {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-theme.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface2));
+}
+
 /* ─── Toast ──────────────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
   bottom: calc(24px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(0);
-  background: #1e2530;
+  background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 10px 18px;
