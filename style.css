@@ -657,30 +657,6 @@ select option { background: var(--surface2); }
   z-index: 3;
 }
 
-/* ─── Sheets Modal ───────────────────────────────────────────────────────── */
-.sheets-btns {
-  display: flex;
-  gap: 10px;
-}
-.btn-sheets {
-  flex: 1;
-  background: var(--surface2);
-  border: 1.5px solid var(--border);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 16px 8px;
-  font-size: 0.82rem;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  transition: border-color 0.15s;
-  font-family: var(--font);
-}
-.btn-sheets:hover { border-color: var(--accent); }
-.btn-sheets span:first-child { font-size: 1.8rem; }
-
 
 /* ─── Location Search ────────────────────────────────────────────────────── */
 .loc-search-row {

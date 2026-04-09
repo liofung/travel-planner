@@ -541,7 +541,7 @@ function renderTrip() {
         <div class="ab-sub">${[trip.destination ? '📍 ' + trip.destination : '', range].filter(Boolean).join('  ·  ')}</div>
       </div>
       <div class="ab-actions">
-        <button class="btn-icon btn-sheets-trip" title="${trip.sheetUrl ? 'Sheets connected' : 'Connect Google Sheets'}" style="${trip.sheetUrl ? '' : 'opacity:0.45'}">📊</button>
+        <button class="btn-icon btn-csv-trip" title="Export/Import CSV">📊</button>
         <button class="btn-icon btn-edit-trip" title="Edit trip">✏️</button>
         <button class="btn-primary-sm" id="btn-new-day">+ Day</button>
       </div>
@@ -812,13 +812,6 @@ function renderSettings() {
           <button class="btn-primary-sm" id="btn-save-start-hour">Save</button>
         </div>
         <div class="settings-section">
-          <h3>📊 Google Sheets Sync</h3>
-          <p class="settings-desc">Paste your Google OAuth Client ID to enable direct Sheets sync per trip. <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--accent)">Get one free →</a></p>
-          <input type="text" id="inp-gclient-id" class="input-code" placeholder="xxxxxxxx.apps.googleusercontent.com" value="${esc(state.gClientId || '')}" />
-          <button class="btn-primary-sm" id="btn-save-gclient">Save Client ID</button>
-          <div class="settings-status ${state.gClientId ? '' : 'coming-soon'}">${state.gClientId ? '✅ Client ID saved — tap 📊 on any trip to sync' : '⬜ No Client ID — CSV export/import available'}</div>
-        </div>
-        <div class="settings-section">
           <h3>💾 Data</h3>
           <button class="btn-danger" id="btn-export-json">⬇️ Export all trips (JSON)</button>
           <button class="btn-danger" id="btn-import-json">⬆️ Import trips (JSON)</button>
@@ -1072,260 +1065,27 @@ function saveDayModal(existing, dayNum) {
   else navigate('day', currentTripId, currentDayId);
 }
 
-/* ─── Google Sheets OAuth + API ──────────────────────────────────────────── */
-const SHEETS_SCOPE   = 'https://www.googleapis.com/auth/spreadsheets';
-const SHEETS_API     = 'https://sheets.googleapis.com/v4/spreadsheets';
-const DRIVE_API      = 'https://www.googleapis.com/drive/v3/files';
-let   gToken         = null; // in-memory only — never persisted
-
+/* ─── Per-trip CSV modal ──────────────────────────────────────────────────── */
 const CSV_HEADERS = ['Day','Theme','Date','Type','Emoji','Title','Start','End','Cost','Currency','Location','Notes'];
 
-function openSheetsModal(trip) {
-  const hasOAuth = !!state.gClientId;
-  const connected = !!trip.gSheetId;
-
+function openTripCSVModal(trip) {
   openModal(`
   <div class="modal-header">
     <button class="modal-cancel">Cancel</button>
-    <span class="modal-title">📊 Google Sheets</span>
+    <span class="modal-title">📊 Export / Import</span>
   </div>
   <div class="modal-body">
-    ${hasOAuth ? `
-      ${connected ? `
-        <div class="settings-status" style="font-size:0.75rem;word-break:break-all">
-          ✅ Linked — <a href="https://docs.google.com/spreadsheets/d/${esc(trip.gSheetId)}" target="_blank" style="color:var(--accent)">Open Sheet</a>
-        </div>
-        <button class="btn-primary-sm" id="sh-sync" style="width:100%">📤 Sync to Sheet</button>
-        <button class="btn-danger" id="sh-pull">📥 Import from Sheet</button>
-        <button class="btn-danger" id="sh-unlink">🔌 Unlink Sheet</button>
-      ` : `
-        <p class="settings-desc">Sign in with Google to create or link a sheet for this trip.</p>
-        <div class="sheets-btns">
-          <button class="btn-sheets" id="sh-new">
-            <span>📄</span><span>New Sheet</span>
-          </button>
-          <button class="btn-sheets" id="sh-existing">
-            <span>🔗</span><span>Existing Sheet</span>
-          </button>
-        </div>
-        <div id="sh-existing-form" style="display:none">
-          <div class="form-group" style="margin-top:10px">
-            <label>SHEET ID OR URL</label>
-            <input type="text" id="sh-sheet-id" class="input-code" placeholder="Paste Google Sheets URL or ID" />
-          </div>
-          <button class="btn-primary-sm" id="sh-link" style="width:100%;margin-top:4px">🔗 Sign in & Link</button>
-        </div>
-      `}
-      <div id="sh-status" class="settings-status" style="display:none;margin-top:6px"></div>
-    ` : `
-      <p class="settings-desc">Add your Google OAuth Client ID in Settings to enable live sync.</p>
-      <p class="settings-desc" style="margin-top:4px">For now, use CSV export/import below.</p>
-    `}
-    <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-      <button class="btn-danger" id="sh-export-csv">⬇️ Export CSV</button>
-      <button class="btn-danger" id="sh-import-csv">⬆️ Import CSV</button>
+    <p class="settings-desc">Export this trip as CSV to open in Google Sheets or Excel. Import a CSV to restore the itinerary.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+      <button class="btn-primary-sm" id="sh-export-csv" style="width:100%">⬇️ Export trip CSV</button>
+      <button class="btn-danger" id="sh-import-csv">⬆️ Import trip CSV</button>
       <input type="file" id="sh-import-file" accept=".csv" style="display:none" />
     </div>
   </div>`);
 
-  // CSV always available
-  document.getElementById('sh-export-csv')?.addEventListener('click', () => exportTripCSV(trip));
-  document.getElementById('sh-import-csv')?.addEventListener('click', () =>
-    document.getElementById('sh-import-file').click()
-  );
+  document.getElementById('sh-export-csv')?.addEventListener('click', () => { exportTripCSV(trip); closeModal(); });
+  document.getElementById('sh-import-csv')?.addEventListener('click', () => document.getElementById('sh-import-file').click());
   document.getElementById('sh-import-file')?.addEventListener('change', e => importTripCSV(trip, e));
-
-  if (!hasOAuth) return;
-
-  const setStatus = (msg) => {
-    const el = document.getElementById('sh-status');
-    if (el) { el.style.display = ''; el.textContent = msg; }
-  };
-
-  if (connected) {
-    document.getElementById('sh-sync')?.addEventListener('click', async () => {
-      setStatus('⏳ Signing in…');
-      withGToken(async token => {
-        setStatus('⏳ Syncing…');
-        try {
-          await syncToGSheet(trip, token);
-          setStatus('✅ Synced successfully');
-        } catch (e) { setStatus('❌ ' + e.message); }
-      });
-    });
-    document.getElementById('sh-pull')?.addEventListener('click', async () => {
-      setStatus('⏳ Signing in…');
-      withGToken(async token => {
-        setStatus('⏳ Importing…');
-        try {
-          await importFromGSheet(trip, token);
-          setStatus('✅ Imported');
-          setTimeout(() => { closeModal(); render(); }, 800);
-        } catch (e) { setStatus('❌ ' + e.message); }
-      });
-    });
-    document.getElementById('sh-unlink')?.addEventListener('click', () => {
-      if (confirm('Unlink this sheet? Sheet data is not deleted.')) {
-        delete trip.gSheetId; save(); closeModal(); render();
-      }
-    });
-  } else {
-    document.getElementById('sh-new')?.addEventListener('click', () => {
-      setStatus('⏳ Signing in…');
-      withGToken(async token => {
-        setStatus('⏳ Creating sheet…');
-        try {
-          const id = await createGSheet(trip.name || 'Trip', token);
-          trip.gSheetId = id; save();
-          setStatus('⏳ Writing itinerary…');
-          await syncToGSheet(trip, token);
-          setStatus(`✅ Created & synced — <a href="https://docs.google.com/spreadsheets/d/${id}" target="_blank" style="color:var(--accent)">Open Sheet</a>`);
-          document.getElementById('sh-status').innerHTML = document.getElementById('sh-status').textContent;
-          document.getElementById('sh-status').innerHTML = `✅ Created — <a href="https://docs.google.com/spreadsheets/d/${id}" target="_blank" style="color:var(--accent)">Open Sheet</a>`;
-          setTimeout(() => { closeModal(); render(); }, 1500);
-        } catch (e) { setStatus('❌ ' + e.message); }
-      });
-    });
-    document.getElementById('sh-existing')?.addEventListener('click', () => {
-      document.getElementById('sh-existing-form').style.display = '';
-      document.getElementById('sh-sheet-id')?.focus();
-    });
-    document.getElementById('sh-link')?.addEventListener('click', () => {
-      const raw = document.getElementById('sh-sheet-id').value.trim();
-      const id  = extractSheetId(raw);
-      if (!id) { setStatus('❌ Could not find a sheet ID in that URL.'); return; }
-      setStatus('⏳ Signing in…');
-      withGToken(async token => {
-        try {
-          // Verify access by reading sheet metadata
-          const res = await gFetch(`${SHEETS_API}/${id}?fields=spreadsheetId,properties.title`, token);
-          trip.gSheetId = res.spreadsheetId; save();
-          setStatus('✅ Linked to "' + res.properties.title + '"');
-          setTimeout(() => { closeModal(); render(); }, 1000);
-        } catch (e) { setStatus('❌ Could not access that sheet. Check the ID and try again.'); }
-      });
-    });
-  }
-}
-
-/* ─── OAuth helpers ───────────────────────────────────────────────────────── */
-function withGToken(callback) {
-  const clientId = state.gClientId;
-  if (!clientId) { alert('Add your Google Client ID in Settings first.'); return; }
-  if (!window.google?.accounts?.oauth2) {
-    alert('Google sign-in library not loaded yet — please try again in a moment.');
-    return;
-  }
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope:     SHEETS_SCOPE,
-    callback:  response => {
-      if (response.error) { alert('Sign-in failed: ' + response.error); return; }
-      gToken = response.access_token;
-      callback(gToken);
-    },
-  });
-  client.requestAccessToken({ prompt: gToken ? '' : 'consent' });
-}
-
-async function gFetch(url, token, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', ...(options.headers || {}) },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-function extractSheetId(raw) {
-  // Accepts full URL or bare ID
-  const m = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
-  return m ? m[1] : (raw.match(/^[a-zA-Z0-9_-]{20,}$/) ? raw : null);
-}
-
-async function createGSheet(name, token) {
-  const data = await gFetch(SHEETS_API, token, {
-    method: 'POST',
-    body: {
-      properties: { title: name + ' — Itinerary' },
-      sheets: [{ properties: { title: 'Itinerary' } }],
-    },
-  });
-  return data.spreadsheetId;
-}
-
-async function ensureItinerarySheet(sheetId, token) {
-  // Check if 'Itinerary' tab exists; add it if not
-  const meta = await gFetch(`${SHEETS_API}/${sheetId}?fields=sheets.properties.title`, token);
-  const exists = meta.sheets?.some(s => s.properties.title === 'Itinerary');
-  if (!exists) {
-    await gFetch(`${SHEETS_API}/${sheetId}:batchUpdate`, token, {
-      method: 'POST',
-      body: { requests: [{ addSheet: { properties: { title: 'Itinerary' } } }] },
-    });
-  }
-}
-
-async function syncToGSheet(trip, token) {
-  await ensureItinerarySheet(trip.gSheetId, token);
-  const rows = tripToCSVRows(trip); // reuse existing row builder
-  // Clear then write
-  await gFetch(`${SHEETS_API}/${trip.gSheetId}/values/Itinerary:clear`, token, { method: 'POST', body: {} });
-  await gFetch(`${SHEETS_API}/${trip.gSheetId}/values/Itinerary!A1?valueInputOption=USER_ENTERED`, token, {
-    method: 'PUT',
-    body: { values: rows },
-  });
-  // Bold + freeze header row via batchUpdate
-  const sheetMeta = await gFetch(`${SHEETS_API}/${trip.gSheetId}?fields=sheets.properties`, token);
-  const sheetTabId = sheetMeta.sheets?.find(s => s.properties.title === 'Itinerary')?.properties?.sheetId ?? 0;
-  await gFetch(`${SHEETS_API}/${trip.gSheetId}:batchUpdate`, token, {
-    method: 'POST',
-    body: { requests: [
-      { repeatCell: { range: { sheetId: sheetTabId, startRowIndex: 0, endRowIndex: 1 },
-          cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.102, green: 0.451, blue: 0.914 } } },
-          fields: 'userEnteredFormat(textFormat,backgroundColor)' } },
-      { updateSheetProperties: { properties: { sheetId: sheetTabId, gridProperties: { frozenRowCount: 1 } },
-          fields: 'gridProperties.frozenRowCount' } },
-    ]},
-  });
-}
-
-async function importFromGSheet(trip, token) {
-  await ensureItinerarySheet(trip.gSheetId, token);
-  const data = await gFetch(`${SHEETS_API}/${trip.gSheetId}/values/Itinerary`, token);
-  const [headers, ...rows] = data.values || [];
-  if (!headers) throw new Error('Sheet is empty — sync first.');
-  const idx = k => headers.indexOf(k);
-  if (idx('Day') === -1) throw new Error('Invalid sheet format — missing expected headers.');
-
-  const dayMap = {};
-  rows.forEach(row => {
-    const dayNum = Number(row[idx('Day')]) || 1;
-    if (!dayMap[dayNum]) dayMap[dayNum] = { title: row[idx('Theme')] || '', activities: [] };
-    const type = row[idx('Type')]?.trim();
-    if (type) {
-      dayMap[dayNum].activities.push({
-        id: uid(), type,
-        title:     row[idx('Title')]    || '',
-        startTime: row[idx('Start')]    || '09:00',
-        endTime:   row[idx('End')]      || '10:00',
-        cost:      row[idx('Cost')]     || '',
-        currency:  row[idx('Currency')] || trip.currency || '',
-        location:  row[idx('Location')] || '',
-        notes:     row[idx('Notes')]    || '',
-      });
-    }
-  });
-
-  if (!confirm(`Import ${Object.keys(dayMap).length} day(s) from Google Sheet? This replaces the current itinerary.`)) return;
-  trip.days = Object.entries(dayMap)
-    .sort(([a],[b]) => Number(a)-Number(b))
-    .map(([,d]) => ({ id: uid(), title: d.title, activities: d.activities }));
-  save();
 }
 
 /* ─── CSV Export / Import ─────────────────────────────────────────────────── */
@@ -1626,8 +1386,8 @@ function attachHandlers() {
     document.querySelector('.btn-edit-trip')?.addEventListener('click', () => {
       openTripModal(tripById(currentTripId));
     });
-    document.querySelector('.btn-sheets-trip')?.addEventListener('click', () => {
-      openSheetsModal(tripById(currentTripId));
+    document.querySelector('.btn-csv-trip')?.addEventListener('click', () => {
+      openTripCSVModal(tripById(currentTripId));
     });
     document.querySelectorAll('.day-card').forEach(card => {
       card.addEventListener('click', e => {
@@ -1759,10 +1519,6 @@ function attachHandlers() {
     }
     document.getElementById('btn-save-start-hour')?.addEventListener('click', () => {
       state.dayStartHour = parseInt(document.getElementById('inp-start-hour').value, 10);
-      save(); render();
-    });
-    document.getElementById('btn-save-gclient')?.addEventListener('click', () => {
-      state.gClientId = document.getElementById('inp-gclient-id').value.trim();
       save(); render();
     });
     document.getElementById('btn-export-json')?.addEventListener('click', exportJSON);
