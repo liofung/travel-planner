@@ -819,6 +819,7 @@ function renderSettings() {
           <button class="btn-danger" id="btn-export-sheets">📊 Export all trips to Sheets (CSV)</button>
           <button class="btn-danger" id="btn-import-sheets">📊 Import from Sheets (CSV)</button>
           <input type="file" id="inp-import-sheets" accept=".csv" style="display:none" />
+          <button class="btn-danger" id="btn-sample-sheets">📋 Download sample CSV</button>
           <button class="btn-danger" id="btn-clear-data">🗑 Clear all data</button>
         </div>
       </div>
@@ -1080,12 +1081,14 @@ function openTripCSVModal(trip) {
       <button class="btn-primary-sm" id="sh-export-csv" style="width:100%">⬇️ Export trip CSV</button>
       <button class="btn-danger" id="sh-import-csv">⬆️ Import trip CSV</button>
       <input type="file" id="sh-import-file" accept=".csv" style="display:none" />
+      <button class="btn-danger" id="sh-sample-csv">📋 Download sample CSV</button>
     </div>
   </div>`);
 
   document.getElementById('sh-export-csv')?.addEventListener('click', () => { exportTripCSV(trip); closeModal(); });
   document.getElementById('sh-import-csv')?.addEventListener('click', () => document.getElementById('sh-import-file').click());
   document.getElementById('sh-import-file')?.addEventListener('change', e => importTripCSV(trip, e));
+  document.getElementById('sh-sample-csv')?.addEventListener('click', () => downloadSampleCSV('trip'));
 }
 
 /* ─── CSV Export / Import ─────────────────────────────────────────────────── */
@@ -1531,6 +1534,7 @@ function attachHandlers() {
       document.getElementById('inp-import-sheets').click();
     });
     document.getElementById('inp-import-sheets')?.addEventListener('change', importAllCSV);
+    document.getElementById('btn-sample-sheets')?.addEventListener('click', () => downloadSampleCSV('all'));
     document.getElementById('btn-clear-data')?.addEventListener('click', () => {
       if (confirm('Delete all trips and data? This cannot be undone.')) {
         state = { trips: [] };
@@ -1681,6 +1685,43 @@ function importAllCSV(e) {
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+
+/* ─── Sample CSV ──────────────────────────────────────────────────────────── */
+function downloadSampleCSV(mode) {
+  // mode: 'trip' = per-trip format, 'all' = all-trips format
+  const tripRows = [
+    // Day, Theme, Date, Type, Emoji, Title, Start, End, Cost, Currency, Location, Notes
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'transit',     '🚇', 'Narita Express to Shinjuku',  '14:00', '15:30', '3020', 'JPY', 'Narita Airport, Japan',         'Take N\'EX platform 13-14'],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'hotel',       '🏨', 'Check-in — Shinjuku Hotel',   '15:30', '16:30', '',     'JPY', 'Kabukicho, Shinjuku, Tokyo',    'Early check-in requested'],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'walk',        '🚶', 'Explore Shibuya Scramble',    '17:00', '18:30', '',     'JPY', 'Shibuya Crossing, Tokyo',       ''],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'food',        '🍜', 'Ramen at Ichiran',             '19:00', '20:00', '1500', 'JPY', 'Ichiran Shibuya, Tokyo',        'Solo booth seating — no reservations needed'],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'entertainment','🎭', 'Shibuya Sky Observation Deck','20:30', '22:00', '2000', 'JPY', 'Shibuya Sky, 2-24-12 Shibuya', 'Book tickets in advance'],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Breakfast at hotel',          '08:00', '08:45', '',     'JPY', 'Shinjuku Hotel, Tokyo',         ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'attraction',  '🏛',  'Senso-ji Temple',             '09:30', '11:00', '',     'JPY', 'Senso-ji, Asakusa, Tokyo',      'Arrive early to avoid crowds'],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'shopping',    '🛍',  'Nakamise Shopping Street',    '11:00', '12:00', '3000', 'JPY', 'Nakamise-dori, Asakusa, Tokyo', 'Souvenirs & street snacks'],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Tempura lunch at Daikokuya',  '12:30', '13:30', '2200', 'JPY', 'Daikokuya, Asakusa, Tokyo',     'Cash only'],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'transit',     '🚇', 'Subway to Akihabara',         '14:00', '14:20', '200',  'JPY', 'Asakusa Station, Tokyo',        ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'shopping',    '🛍',  'Akihabara Electric Town',     '14:30', '17:00', '5000', 'JPY', 'Akihabara, Chiyoda, Tokyo',     'Yodobashi Camera for electronics'],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Yakiniku dinner',             '18:30', '20:00', '4000', 'JPY', 'Akihabara, Tokyo',              ''],
+  ];
+
+  let rows, filename;
+  if (mode === 'all') {
+    rows = [ALL_CSV_HEADERS, ...tripRows.map(r => ['Tokyo Adventure', '2025-05-12', '2025-05-13', 'JPY', ...r])];
+    filename = 'sample-all-trips.csv';
+  } else {
+    rows = [CSV_HEADERS, ...tripRows];
+    filename = 'sample-trip.csv';
+  }
+
+  const csv  = rows.map(r => r.map(csvEscapeCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Sample downloaded — open in Sheets or Excel to see the expected format');
 }
 
 /* ─── Init ────────────────────────────────────────────────────────────────── */
