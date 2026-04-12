@@ -120,6 +120,7 @@ body {
 .btn-icon {
   background: none;
   border: none;
+  color: var(--text);
   font-size: 1.1rem;
   cursor: pointer;
   padding: 4px;
@@ -573,6 +574,46 @@ select option { background: var(--surface2); }
   border-color: var(--accent);
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface2));
+}
+
+/* ─── Emoji Picker ───────────────────────────────────────────────────────── */
+.emoji-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 200;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  width: 260px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.emoji-opt {
+  background: none;
+  border: none;
+  font-size: 1.35rem;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 6px;
+  line-height: 1;
+  transition: background 0.1s;
+}
+.emoji-opt:hover { background: var(--surface2); }
+
+/* ─── Audio Cue in detail panel ──────────────────────────────────────────── */
+.detail-audio-cue {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+  border-top: 1px dashed var(--border);
+  margin-top: 4px;
+  padding-top: 6px;
+  line-height: 1.5;
 }
 
 /* ─── Toast ──────────────────────────────────────────────────────────────── */

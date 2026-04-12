@@ -597,7 +597,7 @@ function renderDay() {
              background: color-mix(in srgb, ${info.color} ${selected ? 30 : 20}%, transparent);
              border-left-color: ${info.color};">
       <div class="ab-inner">
-        <div class="ab-title">${info.emoji} ${esc(act.title || info.label)}${act.booked ? ' <span class="ab-booked">✓</span>' : ''}</div>
+        <div class="ab-title">${act.emoji || info.emoji} ${esc(act.title || info.label)}${act.booked ? ' <span class="ab-booked">✓</span>' : ''}</div>
         ${h > 30 ? `<div class="ab-meta">${formatTime(act.startTime)}${act.endTime ? ' – ' + formatTime(act.endTime) : ''}${costStr ? '  ·  ' + costStr : ''}</div>` : ''}
       </div>
     </div>`;
@@ -660,18 +660,20 @@ function renderActivityDetail(act, trip) {
   return `
   <div class="detail-content">
     <div class="detail-header">
-      <div class="detail-type" style="color:${info.color}">${info.emoji} <strong>${esc(act.title || info.label)}</strong>
+      <div class="detail-type" style="color:${info.color}">${act.emoji || info.emoji} <strong>${esc(act.title || info.label)}</strong>
         <span class="detail-booking ${act.booked ? 'booked' : ''}">${act.booked ? '✅ Booked' : '○ Not booked'}</span>
       </div>
       <div class="detail-acts">
         ${mapsUrl ? `<a href="${esc(mapsUrl)}" target="_blank" class="btn-icon" title="Open in Maps">🗺</a>` : ''}
+        ${act.audioCue ? `<button class="btn-icon detail-speak-btn" title="Play audio cue">🔊</button>` : ''}
         <button class="btn-icon detail-share-btn" title="Share">↗</button>
         <button class="btn-icon detail-edit-btn" title="Edit">✏️</button>
       </div>
     </div>
     <div class="detail-row">🕐 ${formatTime(act.startTime)} – ${formatTime(act.endTime)}${cost ? `  ·  💰 ${cost}` : ''}</div>
-    ${act.location ? `<div class="detail-row">📍 ${esc(act.location)}</div>` : ''}
-    ${act.notes    ? `<div class="detail-row detail-notes">📝 ${esc(act.notes)}</div>` : ''}
+    ${act.location  ? `<div class="detail-row">📍 ${esc(act.location)}</div>` : ''}
+    ${act.notes     ? `<div class="detail-row detail-notes">📝 ${esc(act.notes)}</div>` : ''}
+    ${act.audioCue  ? `<div class="detail-row detail-audio-cue">🔊 ${esc(act.audioCue)}</div>` : ''}
   </div>`;
 }
 
@@ -702,6 +704,9 @@ function updateDetailPanel(actId) {
   panel.querySelector('.detail-share-btn')?.addEventListener('click', () => {
     if (act) openShareModal(act, trip, dayById(trip, currentDayId));
   });
+  panel.querySelector('.detail-speak-btn')?.addEventListener('click', () => {
+    if (act?.audioCue) ttsSpeak(act.audioCue);
+  });
 }
 
 /* ─── Share ───────────────────────────────────────────────────────────────── */
@@ -716,7 +721,7 @@ function buildShareText(act, trip, day) {
   const mapsUrl = act.mapsUrl || (act.location ? `https://maps.google.com/?q=${encodeURIComponent(act.location)}` : '');
 
   const lines = [];
-  lines.push(`${info.emoji} *${act.title || info.label}*`);
+  lines.push(`${act.emoji || info.emoji} *${act.title || info.label}*`);
   if (trip2?.name) lines.push(`✈️ ${trip2.name}${dateStr ? ` · ${dateStr}` : ''}`);
   lines.push(`🕐 ${formatTime(act.startTime)} – ${formatTime(act.endTime)}`);
   if (act.location) lines.push(`📍 ${act.location}`);
@@ -810,6 +815,24 @@ function renderSettings() {
             </select>
           </div>
           <button class="btn-primary-sm" id="btn-save-start-hour">Save</button>
+        </div>
+        <div class="settings-section">
+          <h3>🔊 Audio Guide</h3>
+          <p class="settings-desc">Choose the voice used when reading activity details aloud. Voices come from your device — install more in system settings.</p>
+          <div class="form-group">
+            <label>VOICE</label>
+            <select id="inp-tts-voice"><option value="">— Loading voices… —</option></select>
+          </div>
+          <div class="form-group">
+            <label>SPEED</label>
+            <select id="inp-tts-rate">
+              <option value="0.7" ${state.ttsRate === 0.7 ? 'selected':''}>Slow</option>
+              <option value="1"   ${(!state.ttsRate || state.ttsRate === 1) ? 'selected':''}>Normal</option>
+              <option value="1.3" ${state.ttsRate === 1.3 ? 'selected':''}>Fast</option>
+            </select>
+          </div>
+          <button class="btn-primary-sm" id="btn-save-tts">Save voice settings</button>
+          <button class="btn-danger" id="btn-test-tts" style="margin-top:6px">▶ Test voice</button>
         </div>
         <div class="settings-section">
           <h3>💾 Data</h3>
@@ -1103,7 +1126,7 @@ function tripToCSVRows(trip) {
     } else {
       acts.forEach(a => rows.push([
         i+1, d.title||'', dateStr,
-        a.type, typeInfo(a.type).emoji, a.title||'',
+        a.type, a.emoji || typeInfo(a.type).emoji, a.title||'',
         a.startTime, a.endTime,
         a.cost||'', a.currency||trip.currency||'',
         a.location||'', a.notes||''
@@ -1169,9 +1192,11 @@ function importTripCSV(trip, e) {
         if (!dayMap[dayNum]) dayMap[dayNum] = { title: row[idx('Theme')] || '', activities: [] };
         const type = row[idx('Type')]?.trim();
         if (type) {
+          const csvEmoji = row[idx('Emoji')]?.trim();
           dayMap[dayNum].activities.push({
             id:        uid(),
             type,
+            emoji:     csvEmoji && csvEmoji !== typeInfo(type).emoji ? csvEmoji : undefined,
             title:     row[idx('Title')]    || '',
             startTime: row[idx('Start')]    || '09:00',
             endTime:   row[idx('End')]      || '10:00',
@@ -1229,6 +1254,15 @@ function openActivityModal(act, prefillStartMins) {
       <input type="hidden" id="am-type" value="${esc(act?.type || 'attraction')}" />
     </div>
     <div class="form-group">
+      <label>EMOJI <span style="font-weight:400;color:var(--muted);font-size:0.75rem">— override the default</span></label>
+      <div style="display:flex;align-items:center;gap:8px;position:relative">
+        <input type="text" id="am-emoji" value="${esc(act?.emoji || typeInfo(act?.type || 'attraction').emoji)}" style="width:58px;text-align:center;font-size:1.4rem;padding:4px 8px" maxlength="2" />
+        <button type="button" id="am-emoji-pick" class="btn-danger" style="font-size:0.82rem;padding:6px 10px">☺ Pick</button>
+        <button type="button" id="am-emoji-reset" class="btn-danger" style="font-size:0.78rem;padding:6px 10px">Reset</button>
+        <div id="am-emoji-popover" class="emoji-popover" style="display:none"></div>
+      </div>
+    </div>
+    <div class="form-group">
       <label>TITLE</label>
       <input type="text" id="am-title" placeholder="e.g. Senso-ji Temple" value="${esc(act?.title || '')}" />
     </div>
@@ -1274,6 +1308,10 @@ function openActivityModal(act, prefillStartMins) {
       <label>NOTES</label>
       <textarea id="am-notes" rows="2" placeholder="Booking refs, tips…">${esc(act?.notes || '')}</textarea>
     </div>
+    <div class="form-group">
+      <label>🔊 AUDIO CUE <span style="font-weight:400;color:var(--muted);font-size:0.75rem">— read aloud for elderly / first-time visitors</span></label>
+      <textarea id="am-audio-cue" rows="3" placeholder="e.g. Senso-ji is Tokyo's oldest temple, founded over 1,400 years ago. Walk through the Thunder Gate and explore the Nakamise shopping street before entering the main hall.">${esc(act?.audioCue || '')}</textarea>
+    </div>
     ${act ? `<button class="btn-delete-act" id="am-delete">Delete Activity</button>` : ''}
   </div>`, () => saveActivityModal(act));
 
@@ -1281,12 +1319,57 @@ function openActivityModal(act, prefillStartMins) {
   document.getElementById('am-type-picker').addEventListener('click', e => {
     const btn = e.target.closest('.type-btn');
     if (!btn) return;
+    const prevType = document.getElementById('am-type').value;
     document.querySelectorAll('#am-type-picker .type-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('am-type').value = btn.dataset.type;
     const info = typeInfo(btn.dataset.type);
     const titleInp = document.getElementById('am-title');
     if (!titleInp.value) titleInp.placeholder = `e.g. ${info.label}`;
+    // Update emoji only if it still matches the previous type's default
+    const emojiInp = document.getElementById('am-emoji');
+    if (emojiInp && emojiInp.value === typeInfo(prevType).emoji) emojiInp.value = info.emoji;
+  });
+
+  // Emoji reset
+  document.getElementById('am-emoji-reset')?.addEventListener('click', () => {
+    const emojiInp = document.getElementById('am-emoji');
+    if (emojiInp) emojiInp.value = typeInfo(document.getElementById('am-type').value).emoji;
+    document.getElementById('am-emoji-popover').style.display = 'none';
+  });
+
+  // Emoji picker
+  const EMOJI_GRID = [
+    '🏨','🛏','🏩','🏪','🏫','🏬','🏭','🏯','🏰','⛩','🗼','🗽','🗿','🗺',
+    '🍜','🍱','🍣','🍛','🍝','🍲','🥘','🍤','🥗','🍔','🍕','🍺','🧋','☕',
+    '✈️','🚇','🚌','🚂','🚢','🛳','⛵','🚡','🚠','🏍','🚗','🚕','🚲','🛵',
+    '🏛','🏟','🎡','🎢','🎠','🏖','🏝','🏔','⛰','🌋','🗻','🏕','🌅','🌃',
+    '🛍','🛒','💳','💰','🎭','🎬','🎵','🎤','🎮','🎯','🏊','🤿','⛷','🧗',
+    '🚶','🧳','📸','🗓','📋','🔑','💼','🎁','🛎','🧭','⛽','🚻','🏧','🎫',
+  ];
+  const popover = document.getElementById('am-emoji-popover');
+  popover.innerHTML = EMOJI_GRID.map(e =>
+    `<button type="button" class="emoji-opt" data-e="${e}">${e}</button>`
+  ).join('');
+
+  document.getElementById('am-emoji-pick')?.addEventListener('click', e => {
+    e.stopPropagation();
+    popover.style.display = popover.style.display === 'none' ? 'grid' : 'none';
+  });
+
+  popover.addEventListener('click', e => {
+    const btn = e.target.closest('.emoji-opt');
+    if (!btn) return;
+    document.getElementById('am-emoji').value = btn.dataset.e;
+    popover.style.display = 'none';
+  });
+
+  // Close popover on outside click
+  document.addEventListener('click', function closeEmojiPop(e) {
+    if (!e.target.closest('#am-emoji-pick') && !e.target.closest('#am-emoji-popover')) {
+      popover.style.display = 'none';
+      document.removeEventListener('click', closeEmojiPop);
+    }
   });
 
   // Booking toggle
@@ -1326,6 +1409,9 @@ function saveActivityModal(existing) {
   const currency  = document.getElementById('am-currency').value;
   const booked    = document.getElementById('am-booked').value === '1';
   const notes     = document.getElementById('am-notes').value.trim();
+  const audioCue  = document.getElementById('am-audio-cue').value.trim();
+  const emojiRaw  = document.getElementById('am-emoji').value.trim();
+  const emoji     = emojiRaw || typeInfo(type).emoji;
 
   if (!startTime || !endTime) { alert('Start and end time are required.'); return; }
 
@@ -1338,7 +1424,7 @@ function saveActivityModal(existing) {
     ? `https://maps.google.com/?q=${lat},${lng}`
     : location ? `https://maps.google.com/?q=${encodeURIComponent(location)}` : '';
 
-  const fields = { type, title, location, lat: lat || '', lng: lng || '', mapsUrl, startTime, endTime, cost: cost || '', currency, booked, notes };
+  const fields = { type, emoji, title, location, lat: lat || '', lng: lng || '', mapsUrl, startTime, endTime, cost: cost || '', currency, booked, notes, audioCue: audioCue || undefined };
   if (existing) {
     Object.assign(existing, fields);
     currentActivityId = existing.id;
@@ -1520,6 +1606,16 @@ function attachHandlers() {
         });
       }
     }
+    // TTS voice selector — populate async
+    ttsPopulateVoiceSelect('inp-tts-voice', state.ttsVoiceName || '');
+    document.getElementById('btn-save-tts')?.addEventListener('click', () => {
+      state.ttsVoiceName = document.getElementById('inp-tts-voice').value;
+      state.ttsRate      = parseFloat(document.getElementById('inp-tts-rate').value);
+      save(); showToast('Voice settings saved');
+    });
+    document.getElementById('btn-test-tts')?.addEventListener('click', () => {
+      ttsSpeak('Victoria Harbour is one of the most iconic sights in Hong Kong. Take your time to enjoy the view across the water to Kowloon.');
+    });
     document.getElementById('btn-save-start-hour')?.addEventListener('click', () => {
       state.dayStartHour = parseInt(document.getElementById('inp-start-hour').value, 10);
       save(); render();
@@ -1601,7 +1697,7 @@ function allTripsToCSVRows() {
         acts.forEach(a => rows.push([
           ...tripBase,
           i+1, d.title||'', dateStr,
-          a.type, typeInfo(a.type).emoji, a.title||'',
+          a.type, a.emoji || typeInfo(a.type).emoji, a.title||'',
           a.startTime, a.endTime,
           a.cost||'', a.currency||trip.currency||'',
           a.location||'', a.notes||''
@@ -1657,9 +1753,11 @@ function importAllCSV(e) {
         if (!trip.days[dayNum]) trip.days[dayNum] = { title: row[idx('Theme')]||'', activities: [] };
         const type = row[idx('Type')]?.trim();
         if (type) {
+          const csvEmoji = row[idx('Emoji')]?.trim();
           trip.days[dayNum].activities.push({
             id:        uid(),
             type,
+            emoji:     csvEmoji && csvEmoji !== typeInfo(type).emoji ? csvEmoji : undefined,
             title:     row[idx('Title')]    || '',
             startTime: row[idx('Start')]    || '09:00',
             endTime:   row[idx('End')]      || '10:00',
@@ -1685,6 +1783,61 @@ function importAllCSV(e) {
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+
+/* ─── Text-to-Speech / Audio Cue ─────────────────────────────────────────── */
+function ttsGetVoice() {
+  const voices = window.speechSynthesis?.getVoices() || [];
+  if (state.ttsVoiceName) {
+    const v = voices.find(v => v.name === state.ttsVoiceName);
+    if (v) return v;
+  }
+  return null; // browser default
+}
+
+function ttsPopulateVoiceSelect(selectId, currentName) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const populate = () => {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return;
+    sel.innerHTML = `<option value="">— System default —</option>` +
+      voices.map(v =>
+        `<option value="${esc(v.name)}" ${v.name === currentName ? 'selected' : ''}>
+          ${esc(v.name)} (${v.lang})${v.localService ? '' : ' ☁'}
+        </option>`
+      ).join('');
+  };
+  populate();
+  window.speechSynthesis.onvoiceschanged = populate;
+}
+
+let _ttsUtt = null; // module-level ref prevents GC on iOS Safari
+let _ttsKeepAlive = null;
+
+function ttsSpeak(text) {
+  if (!window.speechSynthesis) { showToast('Text-to-speech not supported on this browser.'); return; }
+  window.speechSynthesis.cancel();
+  clearInterval(_ttsKeepAlive);
+
+  // Small delay after cancel() to avoid a race on some browsers
+  setTimeout(() => {
+    _ttsUtt = new SpeechSynthesisUtterance(text);
+    const voice = ttsGetVoice();
+    if (voice) { _ttsUtt.voice = voice; _ttsUtt.lang = voice.lang; }
+    _ttsUtt.rate = state.ttsRate || 1;
+    _ttsUtt.onend   = () => { clearInterval(_ttsKeepAlive); _ttsUtt = null; };
+    _ttsUtt.onerror = () => { clearInterval(_ttsKeepAlive); _ttsUtt = null; };
+
+    // iOS Safari pauses synth when page briefly loses focus — keep it alive
+    _ttsKeepAlive = setInterval(() => {
+      if (!window.speechSynthesis.speaking) { clearInterval(_ttsKeepAlive); return; }
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
+    }, 10000);
+
+    window.speechSynthesis.speak(_ttsUtt);
+  }, 100);
 }
 
 /* ─── Sample CSV ──────────────────────────────────────────────────────────── */
