@@ -1304,6 +1304,11 @@ function openActivityModal(act, prefillStartMins) {
       </button>
       <input type="hidden" id="am-booked" value="${booked ? '1' : '0'}" />
     </div>
+    ${!act ? `
+    <div class="form-group" id="am-repeat-group">
+      <label id="am-repeat-label">NIGHTS <span style="font-weight:400;color:var(--muted);font-size:0.75rem">— copies to the following days too</span></label>
+      <input type="number" id="am-repeat" min="1" max="30" value="1" style="width:80px" />
+    </div>` : ''}
     <div class="form-group">
       <label>NOTES</label>
       <textarea id="am-notes" rows="2" placeholder="Booking refs, tips…">${esc(act?.notes || '')}</textarea>
@@ -1326,6 +1331,15 @@ function openActivityModal(act, prefillStartMins) {
     const info = typeInfo(btn.dataset.type);
     const titleInp = document.getElementById('am-title');
     if (!titleInp.value) titleInp.placeholder = `e.g. ${info.label}`;
+    // Update repeat label
+    const repeatLabel = document.getElementById('am-repeat-label');
+    if (repeatLabel) {
+      if (btn.dataset.type === 'hotel') {
+        repeatLabel.innerHTML = 'NIGHTS <span style="font-weight:400;color:var(--muted);font-size:0.75rem">— copies to the following days too</span>';
+      } else {
+        repeatLabel.innerHTML = 'REPEAT FOR <span style="font-weight:400;color:var(--muted);font-size:0.75rem">days (1 = no repeat)</span>';
+      }
+    }
     // Update emoji only if it still matches the previous type's default
     const emojiInp = document.getElementById('am-emoji');
     if (emojiInp && emojiInp.value === typeInfo(prevType).emoji) emojiInp.value = info.emoji;
@@ -1429,9 +1443,22 @@ function saveActivityModal(existing) {
     Object.assign(existing, fields);
     currentActivityId = existing.id;
   } else {
-    const act = { id: uid(), ...fields };
-    day.activities.push(act);
-    currentActivityId = act.id;
+    const repeatVal = parseInt(document.getElementById('am-repeat')?.value || '1', 10);
+    const repeatDays = Math.max(1, Math.min(repeatVal, 30));
+    const dayIndex = trip.days.findIndex(d => d.id === day.id);
+
+    for (let i = 0; i < repeatDays; i++) {
+      const targetDay = trip.days[dayIndex + i];
+      if (!targetDay) break;
+      const act = { id: uid(), ...fields };
+      targetDay.activities.push(act);
+      if (i === 0) currentActivityId = act.id;
+    }
+
+    if (repeatDays > 1) {
+      const label = type === 'hotel' ? `Hotel added across ${repeatDays} nights` : `Activity repeated across ${repeatDays} days`;
+      showToast(label);
+    }
   }
   save();
   closeModal();
