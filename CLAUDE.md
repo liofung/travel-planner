@@ -25,3 +25,22 @@ Data persisted to `localStorage` key `travel-planner-v1`. No backend, no API key
 - `navigate(view, tripId?, dayId?)` sets `currentView` then calls `render()`.
 - Timeline: 1px = 1 minute, `minsToY()` / `yToMins()` use `state.dayStartHour`.
 - `state.theme`: `'light'` | `'dark'` | `undefined` (auto, follows OS).
+
+## Activity data model
+
+Every activity object stored in `localStorage` has these fields:
+
+```
+id, type, emoji, title, location, lat, lng, mapsUrl,
+startTime, endTime, cost, currency, booked, notes, audioCue
+```
+
+## CSV columns — keep these three in sync at all times
+
+Whenever a field is **added or removed** from the activity data model, update **all three** of these together:
+
+1. **`CSV_HEADERS`** — per-trip export/import header row
+2. **`ALL_CSV_HEADERS`** — all-trips export/import header row (prepends Trip/TripStart/TripEnd/TripCurrency)
+3. **`downloadSampleCSV` → `tripRows`** — sample data array (column count must match `CSV_HEADERS`)
+
+Also update the matching row builders (`tripToCSVRows`, `allTripsToCSVRows`) and both importers (`importTripCSV`, `importAllCSV`).

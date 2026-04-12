@@ -1102,7 +1102,7 @@ function saveDayModal(existing, dayNum) {
 }
 
 /* ─── Per-trip CSV modal ──────────────────────────────────────────────────── */
-const CSV_HEADERS = ['Day','Theme','Date','Type','Emoji','Title','Start','End','Cost','Currency','Location','Notes'];
+const CSV_HEADERS = ['Day','Theme','Date','Type','Emoji','Title','Start','End','Cost','Currency','Location','Notes','AudioCue'];
 
 function openTripCSVModal(trip) {
   openModal(`
@@ -1134,14 +1134,14 @@ function tripToCSVRows(trip) {
     const dateStr = dd ? dd.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'}) : '';
     const acts = d.activities;
     if (!acts.length) {
-      rows.push([i+1, d.title||'', dateStr, '', '', '', '', '', '', '', '', '']);
+      rows.push([i+1, d.title||'', dateStr, '', '', '', '', '', '', '', '', '', '']);
     } else {
       acts.forEach(a => rows.push([
         i+1, d.title||'', dateStr,
         a.type, a.emoji || typeInfo(a.type).emoji, a.title||'',
         a.startTime, a.endTime,
         a.cost||'', a.currency||trip.currency||'',
-        a.location||'', a.notes||''
+        a.location||'', a.notes||'', a.audioCue||''
       ]));
     }
   });
@@ -1216,6 +1216,7 @@ function importTripCSV(trip, e) {
             currency:  row[idx('Currency')] || trip.currency || '',
             location:  row[idx('Location')] || '',
             notes:     row[idx('Notes')]    || '',
+            audioCue:  row[idx('AudioCue')] || undefined,
           });
         }
       });
@@ -1720,7 +1721,7 @@ function showToast(msg, durationMs = 3500) {
 }
 
 /* ─── All-trips CSV (Google Sheets compatible) ────────────────────────────── */
-const ALL_CSV_HEADERS = ['Trip','TripStart','TripEnd','TripCurrency','Day','Theme','Date','Type','Emoji','Title','Start','End','Cost','Currency','Location','Notes'];
+const ALL_CSV_HEADERS = ['Trip','TripStart','TripEnd','TripCurrency','Day','Theme','Date','Type','Emoji','Title','Start','End','Cost','Currency','Location','Notes','AudioCue'];
 
 function allTripsToCSVRows() {
   const rows = [ALL_CSV_HEADERS];
@@ -1731,7 +1732,7 @@ function allTripsToCSVRows() {
       const acts = d.activities;
       const tripBase = [trip.name||'', trip.startDate||'', trip.endDate||'', trip.currency||''];
       if (!acts.length) {
-        rows.push([...tripBase, i+1, d.title||'', dateStr, '', '', '', '', '', '', '', '', '']);
+        rows.push([...tripBase, i+1, d.title||'', dateStr, '', '', '', '', '', '', '', '', '', '']);
       } else {
         acts.forEach(a => rows.push([
           ...tripBase,
@@ -1739,7 +1740,7 @@ function allTripsToCSVRows() {
           a.type, a.emoji || typeInfo(a.type).emoji, a.title||'',
           a.startTime, a.endTime,
           a.cost||'', a.currency||trip.currency||'',
-          a.location||'', a.notes||''
+          a.location||'', a.notes||'', a.audioCue||''
         ]));
       }
     });
@@ -1804,6 +1805,7 @@ function importAllCSV(e) {
             currency:  row[idx('Currency')] || '',
             location:  row[idx('Location')] || '',
             notes:     row[idx('Notes')]    || '',
+            audioCue:  row[idx('AudioCue')] || undefined,
           });
         }
       });
@@ -1883,19 +1885,19 @@ function ttsSpeak(text) {
 function downloadSampleCSV(mode) {
   // mode: 'trip' = per-trip format, 'all' = all-trips format
   const tripRows = [
-    // Day, Theme, Date, Type, Emoji, Title, Start, End, Cost, Currency, Location, Notes
-    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'transit',     '🚇', 'Narita Express to Shinjuku',  '14:00', '15:30', '3020', 'JPY', 'Narita Airport, Japan',         'Take N\'EX platform 13-14'],
-    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'hotel',       '🏨', 'Check-in — Shinjuku Hotel',   '15:30', '16:30', '',     'JPY', 'Kabukicho, Shinjuku, Tokyo',    'Early check-in requested'],
-    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'walk',        '🚶', 'Explore Shibuya Scramble',    '17:00', '18:30', '',     'JPY', 'Shibuya Crossing, Tokyo',       ''],
-    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'food',        '🍜', 'Ramen at Ichiran',             '19:00', '20:00', '1500', 'JPY', 'Ichiran Shibuya, Tokyo',        'Solo booth seating — no reservations needed'],
-    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'entertainment','🎭', 'Shibuya Sky Observation Deck','20:30', '22:00', '2000', 'JPY', 'Shibuya Sky, 2-24-12 Shibuya', 'Book tickets in advance'],
-    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Breakfast at hotel',          '08:00', '08:45', '',     'JPY', 'Shinjuku Hotel, Tokyo',         ''],
-    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'attraction',  '🏛',  'Senso-ji Temple',             '09:30', '11:00', '',     'JPY', 'Senso-ji, Asakusa, Tokyo',      'Arrive early to avoid crowds'],
-    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'shopping',    '🛍',  'Nakamise Shopping Street',    '11:00', '12:00', '3000', 'JPY', 'Nakamise-dori, Asakusa, Tokyo', 'Souvenirs & street snacks'],
-    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Tempura lunch at Daikokuya',  '12:30', '13:30', '2200', 'JPY', 'Daikokuya, Asakusa, Tokyo',     'Cash only'],
-    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'transit',     '🚇', 'Subway to Akihabara',         '14:00', '14:20', '200',  'JPY', 'Asakusa Station, Tokyo',        ''],
-    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'shopping',    '🛍',  'Akihabara Electric Town',     '14:30', '17:00', '5000', 'JPY', 'Akihabara, Chiyoda, Tokyo',     'Yodobashi Camera for electronics'],
-    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Yakiniku dinner',             '18:30', '20:00', '4000', 'JPY', 'Akihabara, Tokyo',              ''],
+    // Day, Theme, Date, Type, Emoji, Title, Start, End, Cost, Currency, Location, Notes, AudioCue
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'transit',     '🚇', 'Narita Express to Shinjuku',  '14:00', '15:30', '3020', 'JPY', 'Narita Airport, Japan',         'Take N\'EX platform 13-14',              ''],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'hotel',       '🏨', 'Check-in — Shinjuku Hotel',   '15:30', '16:30', '',     'JPY', 'Kabukicho, Shinjuku, Tokyo',    'Early check-in requested',               ''],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'walk',        '🚶', 'Explore Shibuya Scramble',    '17:00', '18:30', '',     'JPY', 'Shibuya Crossing, Tokyo',       '',                                       'Shibuya Crossing is one of the busiest pedestrian crossings in the world. Up to 3,000 people cross at the same time when the lights turn green. Take a moment to look around and enjoy the energy of the city.'],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'food',        '🍜', 'Ramen at Ichiran',            '19:00', '20:00', '1500', 'JPY', 'Ichiran Shibuya, Tokyo',        'Solo booth seating — no reservations needed', ''],
+    [1, 'Arrival & Shibuya', 'Mon, May 12, 2025', 'entertainment','🎭', 'Shibuya Sky Observation Deck','20:30', '22:00', '2000', 'JPY', 'Shibuya Sky, 2-24-12 Shibuya', 'Book tickets in advance',                ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Breakfast at hotel',          '08:00', '08:45', '',     'JPY', 'Shinjuku Hotel, Tokyo',         '',                                       ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'attraction',  '🏛', 'Senso-ji Temple',             '09:30', '11:00', '',     'JPY', 'Senso-ji, Asakusa, Tokyo',      'Arrive early to avoid crowds',           'Senso-ji is Tokyo\'s oldest temple, founded over 1,400 years ago. As you walk through the large red Thunder Gate, you will see a giant paper lantern hanging above you. The street ahead is called Nakamise, and it is lined with small shops selling traditional snacks and souvenirs. Take your time, enjoy the atmosphere, and do not worry about rushing.'],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'shopping',    '🛍', 'Nakamise Shopping Street',    '11:00', '12:00', '3000', 'JPY', 'Nakamise-dori, Asakusa, Tokyo', 'Souvenirs & street snacks',              ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Tempura lunch at Daikokuya',  '12:30', '13:30', '2200', 'JPY', 'Daikokuya, Asakusa, Tokyo',     'Cash only',                              ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'transit',     '🚇', 'Subway to Akihabara',         '14:00', '14:20', '200',  'JPY', 'Asakusa Station, Tokyo',        '',                                       ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'shopping',    '🛍', 'Akihabara Electric Town',     '14:30', '17:00', '5000', 'JPY', 'Akihabara, Chiyoda, Tokyo',     'Yodobashi Camera for electronics',       ''],
+    [2, 'Asakusa & Akihabara','Tue, May 13, 2025', 'food',        '🍜', 'Yakiniku dinner',             '18:30', '20:00', '4000', 'JPY', 'Akihabara, Tokyo',              '',                                       ''],
   ];
 
   let rows, filename;
