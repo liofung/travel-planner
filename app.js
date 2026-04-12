@@ -666,6 +666,7 @@ function renderActivityDetail(act, trip) {
       <div class="detail-acts">
         ${mapsUrl ? `<a href="${esc(mapsUrl)}" target="_blank" class="btn-icon" title="Open in Maps">🗺</a>` : ''}
         ${act.audioCue ? `<button class="btn-icon detail-speak-btn" title="Play audio cue">🔊</button>` : ''}
+        <button class="btn-icon detail-duplicate-btn" title="Duplicate activity">⧉</button>
         <button class="btn-icon detail-share-btn" title="Share">↗</button>
         <button class="btn-icon detail-edit-btn" title="Edit">✏️</button>
       </div>
@@ -706,6 +707,17 @@ function updateDetailPanel(actId) {
   });
   panel.querySelector('.detail-speak-btn')?.addEventListener('click', () => {
     if (act?.audioCue) ttsSpeak(act.audioCue);
+  });
+  panel.querySelector('.detail-duplicate-btn')?.addEventListener('click', () => {
+    if (!act) return;
+    const t = tripById(currentTripId);
+    const d = dayById(t, currentDayId);
+    if (!d) return;
+    const copy = { ...act, id: uid() };
+    d.activities.push(copy);
+    currentActivityId = copy.id;
+    save(); render();
+    showToast('Activity duplicated');
   });
 }
 
@@ -1232,7 +1244,7 @@ function openActivityModal(act, prefillStartMins) {
   const defaultEnd   = act ? act.endTime   : minsToTime((prefillStartMins ?? (9 * 60)) + 60);
 
   const typeBtns = ACTIVITY_TYPES.map(t => `
-    <button class="type-btn ${act?.type === t.id ? 'active' : ''}" data-type="${t.id}" style="--tc:${t.color}">
+    <button type="button" class="type-btn ${act?.type === t.id ? 'active' : ''}" data-type="${t.id}" style="--tc:${t.color}">
       <span>${t.emoji}</span><span>${t.label}</span>
     </button>`).join('');
 
